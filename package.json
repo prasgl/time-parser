@@ -1,0 +1,15 @@
+{
+  "name": "splunk-time-parser",
+  "version": "1.0.0",
+  "description": "a time parsing function in a similar format to splunk",
+  "main": "splunk-like-time-parser.js",
+  "scripts": {
+    "test": "mocha"
+  },
+  "author": "Prasad Londhe",
+  "license": "ISC",
+  "devDependencies": {
+    "chai": "^4.3.6",
+    "mocha": "^10.0.0"
+  }
+}
