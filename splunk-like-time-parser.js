@@ -10,6 +10,57 @@ const snapUnits = [
 ];
 const operators = ['+', '-'];
 
+/**
+ * Validate input and return object containing 
+ *  - modifier ('now()'), 
+ *  - offsets (like +1mon-5d) and
+ *  - snap unit (s, m, h, d, mon, y)
+ * Throws error if input is not valid
+ * @param {*} expr 
+ * @returns 
+ */
+const validateInput = (expr) => {
+    if (typeof expr !== 'string') {
+        throw new TypeError("parse: A single argument is expected and should be a string");
+    }
+
+    const expression = expr.replace(/\s/g, '');
+
+    const modifier = modifiers.find(m => expression.startsWith(m));
+    if (!modifier) {
+        throw new Error(`parse: the argument must start with ${modifiers}`);
+    }
+
+    let snapUnit;
+    const snapPosition = expression.indexOf(snap);
+    if (snapPosition !== -1) {
+        const unit = expression.substring(snapPosition + 1); // because snap should be specified at the end
+        snapUnit = snapUnits.find(u => u === unit);
+
+        if (!snapUnit) {
+            throw new Error(`parse: Can only snap to ${snapUnits}`);
+        }
+
+        if (snapUnit && !expression.endsWith(`${snap}${snapUnit}`)) {
+            throw new Error(`parse: the argument must end with ${snap} and unit if specified`);
+        }
+    }
+
+    let offsets = expression.substring(modifier.length);
+    if (snapUnit) {
+        offsets = offsets.substring(0, offsets.length - `${snap}${snapUnit}`.length);
+    }
+
+    return { modifier, snapUnit, offsets };
+}
+
+/**
+ * Return array of objects containing offset data, for example, if `offsets` was +1mon-5d,
+ * the returned array would be [{offsetPeriod: mon, offsetUnit: 1}, {offsetPeriod: d, offsetUnit: -5}] 
+ * If offsets was not specified, the returned array will be empty
+ * @param {*} offsets 
+ * @returns 
+ */
 const getOffsets = (offsets) => {
     const set = [];
     let copy = offsets;
@@ -35,53 +86,16 @@ const getOffsets = (offsets) => {
             offsetUnit = unit[0];
             copy = copy.substring(offsetUnit.length);
         } else {
-            // console.log(`copy = ${copy}`);
             throw new Error(`invalid offset unit`);
         }
 
-        set.push({offsetPeriod, offsetUnit});
+        set.push({ offsetPeriod, offsetUnit });
     }
     return set;
 }
 
-exports.parse = (expr) => {
-    if (typeof expr !== 'string') {
-        throw new TypeError("parse: A single argument is expected and should be a string");
-    }
-    
-    const expression = expr.replace(/\s/g, '');
-
-    const modifier = modifiers.find(m => expression.startsWith(m));
-
-    if (!modifier) {
-        throw new Error(`parse: the argument must start with ${modifiers}`);
-    }
-    
-    let snapUnit;
-    const snapPosition = expression.indexOf(snap); // TODO last index of?
-    if (snapPosition !== -1) {
-        const unit = expression.substring(snapPosition + 1);
-        snapUnit = snapUnits.find(u => u === unit);
-
-        if (!snapUnit) {
-            throw new Error(`parse: Can only snap to ${snapUnits}`);
-        }
-
-        if (snapUnit && !expression.endsWith(`${snap}${snapUnit}`)) {
-            throw new Error(`parse: the argument must end with ${snap} and unit if specified`);
-        }
-    }
-
-    let offsets = expression.substring(modifier.length);
-    if (snapUnit) {
-            offsets = offsets.substring(0, offsets.length - `${snap}${snapUnit}`.length);
-    }
-    const offsetsArray = getOffsets(offsets);
-
-    // console.log(`${expression}: ${JSON.stringify(offsetsArray)}`);
-
-    let baseDate = new Date();
-    const baseDateParams = {
+const snapDate = (baseDate, snapUnit) => {
+    const baseDateParts = {
         y: baseDate.getUTCFullYear(),
         mon: baseDate.getUTCMonth(),
         d: baseDate.getUTCDate(),
@@ -90,79 +104,72 @@ exports.parse = (expr) => {
         s: baseDate.getUTCSeconds(),
         ms: baseDate.getUTCMilliseconds()
     }
-    // console.log(`original baseDateParams = ${JSON.stringify(baseDateParams)}`);
-    // offsetPeriod, offsetUnit smhd mon y
+    switch (snapUnit) {
+        case "y":
+            baseDateParts.mon = 0;
+        case "mon":
+            baseDateParts.d = 1;
+        case "d":
+            baseDateParts.h = 0;
+        case "h":
+            baseDateParts.m = 0;
+        case "m":
+            baseDateParts.s = 0;
+        case "s":
+            baseDateParts.ms = 0;
+        default:
+            break;
+    }
+
+    baseDate = new Date(Date.UTC(
+        baseDateParts.y,
+        baseDateParts.mon,
+        baseDateParts.d,
+        baseDateParts.h,
+        baseDateParts.m,
+        baseDateParts.s,
+        baseDateParts.ms));
+
+    return baseDate;
+}
+
+exports.parse = (expr) => {
+    const { modifier, snapUnit, offsets } = validateInput(expr);
+
+    const offsetsArray = getOffsets(offsets);
+
+    // The base value for subsequent date parts manipulation
+    let baseDate;
+    if (modifier === 'now()')
+        baseDate = new Date();
+
+    // get the year, month etc of the baseDate so as to add/reduce the offset 
+    const baseDateParts = {
+        y: baseDate.getUTCFullYear(),
+        mon: baseDate.getUTCMonth(),
+        d: baseDate.getUTCDate(),
+        h: baseDate.getUTCHours(),
+        m: baseDate.getUTCMinutes(),
+        s: baseDate.getUTCSeconds(),
+        ms: baseDate.getUTCMilliseconds()
+    }
+
     offsetsArray.forEach(offset => {
-        // console.log(`offset = ${JSON.stringify(offset)}`);
-        switch(offset.offsetUnit){
-            case "s":
-                baseDateParams.s += offset.offsetPeriod;
-                break;
-            case "m":
-                baseDateParams.m += offset.offsetPeriod;
-                break;
-            case "h":
-                baseDateParams.h += offset.offsetPeriod;
-                break;
-            case "d":
-                baseDateParams.d += offset.offsetPeriod;
-                break;
-            case "mon":
-                baseDateParams.mon += offset.offsetPeriod;
-                break;
-            case "y":
-                baseDateParams.y += offset.offsetPeriod;
-                break;
-            default:
-                break;
-        }
-        // console.log(`updated baseDateParams = ${JSON.stringify(baseDateParams)}`);
+        baseDateParts[offset.offsetUnit] += offset.offsetPeriod;
+
+        // update the base date before using it further
         baseDate = new Date(Date.UTC(
-            baseDateParams.y, 
-            baseDateParams.mon, 
-            baseDateParams.d, 
-            baseDateParams.h, 
-            baseDateParams.m, 
-            baseDateParams.s, 
-            baseDateParams.ms));
-        // console.log(`returning ${baseDate.valueOf()}`);
+            baseDateParts.y,
+            baseDateParts.mon,
+            baseDateParts.d,
+            baseDateParts.h,
+            baseDateParts.m,
+            baseDateParts.s,
+            baseDateParts.ms));
     })
 
     if (snapUnit) {
-        const baseDateParams = {
-            y: baseDate.getUTCFullYear(),
-            mon: baseDate.getUTCMonth(),
-            d: baseDate.getUTCDate(),
-            h: baseDate.getUTCHours(),
-            m: baseDate.getUTCMinutes(),
-            s: baseDate.getUTCSeconds(),
-            ms: baseDate.getUTCMilliseconds()
-        }
-        switch (snapUnit) {
-            case "y":
-                baseDateParams.mon = 0;
-            case "mon":
-                baseDateParams.d = 1;
-            case "d":
-                baseDateParams.h = 0;
-            case "h":
-                baseDateParams.m = 0;
-            case "m":
-                baseDateParams.s = 0;
-            case "s":
-                baseDateParams.ms = 0;
-            default:
-                break;
-        }
-        console.log(`baseDateParams = ${JSON.stringify(baseDateParams)}`)
-        baseDate = new Date(Date.UTC(
-            baseDateParams.y, 
-            baseDateParams.mon, 
-            baseDateParams.d, 
-            baseDateParams.h, 
-            baseDateParams.m, 
-            baseDateParams.s, 
-            baseDateParams.ms));
+        baseDate = snapDate(baseDate, snapUnit);
     }
-    return baseDate.valueOf();
+    return baseDate;
 }
