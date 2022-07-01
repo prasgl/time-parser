@@ -24,8 +24,8 @@ const getOffsets = (offsets) => {
 
         const period = copy.match(/^\d+/);
         if (period) {
-            offsetPeriod = period[0];
-            copy = copy.substring(offsetPeriod.length);
+            offsetPeriod = Number(`${operator}${period[0]}`);
+            copy = copy.substring(period[0].length);
         } else {
             throw new Error(`invalid offset period`);
         }
@@ -35,12 +35,13 @@ const getOffsets = (offsets) => {
             offsetUnit = unit[0];
             copy = copy.substring(offsetUnit.length);
         } else {
+            // console.log(`copy = ${copy}`);
             throw new Error(`invalid offset unit`);
         }
 
-        set.push({operator, offsetPeriod, offsetUnit});
+        set.push({offsetPeriod, offsetUnit});
     }
-    return {set}
+    return set;
 }
 
 exports.parse = (expr) => {
@@ -77,6 +78,91 @@ exports.parse = (expr) => {
     }
     const offsetsArray = getOffsets(offsets);
 
-    return new Date();
-}
+    // console.log(`${expression}: ${JSON.stringify(offsetsArray)}`);
 
+    let baseDate = new Date();
+    const baseDateParams = {
+        y: baseDate.getUTCFullYear(),
+        mon: baseDate.getUTCMonth(),
+        d: baseDate.getUTCDate(),
+        h: baseDate.getUTCHours(),
+        m: baseDate.getUTCMinutes(),
+        s: baseDate.getUTCSeconds(),
+        ms: baseDate.getUTCMilliseconds()
+    }
+    // console.log(`original baseDateParams = ${JSON.stringify(baseDateParams)}`);
+    // offsetPeriod, offsetUnit smhd mon y
+    offsetsArray.forEach(offset => {
+        // console.log(`offset = ${JSON.stringify(offset)}`);
+        switch(offset.offsetUnit){
+            case "s":
+                baseDateParams.s += offset.offsetPeriod;
+                break;
+            case "m":
+                baseDateParams.m += offset.offsetPeriod;
+                break;
+            case "h":
+                baseDateParams.h += offset.offsetPeriod;
+                break;
+            case "d":
+                baseDateParams.d += offset.offsetPeriod;
+                break;
+            case "mon":
+                baseDateParams.mon += offset.offsetPeriod;
+                break;
+            case "y":
+                baseDateParams.y += offset.offsetPeriod;
+                break;
+            default:
+                break;
+        }
+        // console.log(`updated baseDateParams = ${JSON.stringify(baseDateParams)}`);
+        baseDate = new Date(Date.UTC(
+            baseDateParams.y, 
+            baseDateParams.mon, 
+            baseDateParams.d, 
+            baseDateParams.h, 
+            baseDateParams.m, 
+            baseDateParams.s, 
+            baseDateParams.ms));
+        // console.log(`returning ${baseDate.valueOf()}`);
+    })
+
+    if (snapUnit) {
+        const baseDateParams = {
+            y: baseDate.getUTCFullYear(),
+            mon: baseDate.getUTCMonth(),
+            d: baseDate.getUTCDate(),
+            h: baseDate.getUTCHours(),
+            m: baseDate.getUTCMinutes(),
+            s: baseDate.getUTCSeconds(),
+            ms: baseDate.getUTCMilliseconds()
+        }
+        switch (snapUnit) {
+            case "y":
+                baseDateParams.mon = 0;
+            case "mon":
+                baseDateParams.d = 1;
+            case "d":
+                baseDateParams.h = 0;
+            case "h":
+                baseDateParams.m = 0;
+            case "m":
+                baseDateParams.s = 0;
+            case "s":
+                baseDateParams.ms = 0;
+            default:
+                break;
+        }
+        console.log(`baseDateParams = ${JSON.stringify(baseDateParams)}`)
+        baseDate = new Date(Date.UTC(
+            baseDateParams.y, 
+            baseDateParams.mon, 
+            baseDateParams.d, 
+            baseDateParams.h, 
+            baseDateParams.m, 
+            baseDateParams.s, 
+            baseDateParams.ms));
+    }
+    return baseDate.valueOf();
+}
