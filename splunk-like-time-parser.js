@@ -56,7 +56,7 @@ const validateInput = (expr) => {
 
 /**
  * Return array of objects containing offset data, for example, if `offsets` was +1mon-5d,
- * the returned array would be [{offsetPeriod: mon, offsetUnit: 1}, {offsetPeriod: d, offsetUnit: -5}] 
+ * the returned array would be [{offsetPeriod: "mon", offsetUnit: 1}, {offsetPeriod: "d", offsetUnit: -5}] 
  * If offsets was not specified, the returned array will be empty
  * @param {*} offsets 
  * @returns 

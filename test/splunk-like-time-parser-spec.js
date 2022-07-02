@@ -8,8 +8,6 @@ chai.use(asserttype);
 const main = require('../splunk-like-time-parser');
 
 const modifiers = ['now()'];
-const snapUnits = ['s', 'm', 'h', 'd', 'mon', 'y'];
-const operators = ['+', '-'];
 
 describe('Splunk-like Time Parser', () => {
     it('parse: input & output', () => {
@@ -25,123 +23,102 @@ describe('Splunk-like Time Parser', () => {
     });
 
     it('parse: input format validations', () => {
-        // argument should start with modifier
-        expect(() => main.parse('test')).to.throw(Error);
-        for (i = 0; i < modifiers.length; i++) {
-            expect(() => main.parse(modifiers[i])).to.not.throw(Error);
-        }
+        expect(() => main.parse('test'), 'argument should start with modifier').to.throw(Error);
 
-        // any spaces embedded in the argument should be ignored
-        expect(() => main.parse('now ( ) + 1 d @ mon')).to.not.throw(Error);
+        expect(() => main.parse('now ( ) + 1 d @ mon'), 'ignore spaces').to.not.throw(Error);
 
-        // if snap (@) is specified, it should be with snap-unit and at the end of the argument
         expect(() => main.parse('now()@+1m'), 'snap in the middle').to.throw(Error);
         expect(() => main.parse('now()@'), 'no snap unit').to.throw(Error);
         expect(() => main.parse('now()@x'), 'invalid snap unit').to.throw(Error);
 
-        // test for all modifiers and for all valid snapUnits
-        for (i = 0; i < modifiers.length; i++) {
-            for (j = 0; j < snapUnits.length; j++) {
-                expect(() => main.parse(`${modifiers[i]}@${snapUnits[j]}`),
-                    `${modifiers[i]}@${snapUnits[j]} is invalid?`).to.not.throw(Error);
-            }
-        }
-
-        // offset/s if specified, should start with an operator (+ or -)
         expect(() => main.parse('now()1m'), 'offset operator missing').to.throw(Error);
         expect(() => main.parse('now()x1m'), 'invalid offset operator').to.throw(Error);
-        for (i = 0; i < modifiers.length; i++) {
-            for (j = 0; j < snapUnits.length; j++) {
-                for (k = 0; k < operators.length; k++) {
-                    expect(() => main.parse(`${modifiers[i]}${operators[k]}1${snapUnits[j]}`),
-                        `${modifiers[i]}${operators[k]}1${snapUnits[j]} is incorrect?`).to.not.throw(Error);
-                }
-            }
-        }
 
-        // offset should contain numeric period after operator
         expect(() => main.parse('now()+xm'), 'invalid offset period').to.throw(Error);
+    });
 
-        // snap and offset specified, should not throw error
+    it('parse: offsets arithmetic and snap', () => {
+        /*
+            Sample tests
+            now()+1d	    2022-01-09T09:00:00.00Z 	Now plus1 day 
+            now()-1d 	    2022-01-07T09:00:00.00Z 	Now minus 1 day
+            now()@d 	    2022-01-08T00:00:00.00Z 	Now snapped to day 
+            now()-1y@mon	2021-01-01T00:00:00.00Z 	Now minus on year snapped to month 
+            now()+10d+12h	2022-01-18T21:00:00.00Z 	Now plus 10 days and 12 hour
+        */
+
+        const clock = sinon.useFakeTimers(new Date(Date.UTC(2022, 0, 8, 9, 0, 0, 0))); // 2022-01-08T09:00:00Z
+
+        // 'now()+10d+12h' should return time after 10 and a half days 
+        const expected10d12h = new Date(Date.UTC(2022, 0, 18, 21, 0, 0, 0));
+        const actual10d12h = main.parse('now()+10d+12h');
+        console.log('now()+10d+12h', expected10d12h.toUTCString(), actual10d12h.toUTCString());
+        expect(expected10d12h, `expected: ${expected10d12h.toUTCString()}, actual: now()+10d+12h`).to.deep.equal(actual10d12h);
+
+        const modifiers = ['now()'];
+        const operators = ['+', '-'];
+        const offsetUnits = ['', 's', 'm', 'h', 'd', 'mon', 'y'];
+        const snapUnits = ['', '@s', '@m', '@h', '@d', '@mon', '@y'];
+
         for (i = 0; i < modifiers.length; i++) {
-            for (j = 0; j < snapUnits.length; j++) {
-                for (k = 0; k < operators.length; k++) {
+            for (j = 0; j < operators.length; j++) {
+                for (k = 0; k < offsetUnits.length; k++) {
                     for (l = 0; l < snapUnits.length; l++) {
-                        expect(() => main.parse(`${modifiers[i]}${operators[k]}1${snapUnits[j]}@${snapUnits[l]}`),
-                            `${modifiers[i]}${operators[k]}1${snapUnits[j]}@${snapUnits[l]} is incorrect?`).to.not.throw(Error);
+
+                        // format the input string for the parser
+                        const expr = offsetUnits[k] === '' 
+                            ? `${modifiers[i]}${snapUnits[l]}` 
+                            : `${modifiers[i]}${operators[j]}1${offsetUnits[k]}${snapUnits[l]}`;
+
+                        // set the expected date
+                        let expected = new Date();
+
+                        switch (offsetUnits[k]) {
+                            case 'y':
+                                expected.setUTCFullYear(operators[j] === '-' ? expected.getUTCFullYear() - 1 : expected.getUTCFullYear() + 1);
+                                break;
+                            case 'mon':
+                                expected.setUTCMonth(operators[j] === '-' ? expected.getUTCMonth() - 1 : expected.getUTCMonth() + 1);
+                                break;
+                            case 'd':
+                                expected.setUTCDate(operators[j] === '-' ? expected.getUTCDate() - 1 : expected.getUTCDate() + 1);
+                                break;
+                            case 'h':
+                                expected.setUTCHours(operators[j] === '-' ? expected.getUTCHours() - 1 : expected.getUTCHours() + 1);
+                                break;
+                            case 'm':
+                                expected.setUTCMinutes(operators[j] === '-' ? expected.getUTCMinutes() - 1 : expected.getUTCMinutes() + 1);
+                                break;
+                            case 's':
+                                expected.setUTCSeconds(operators[j] === '-' ? expected.getUTCSeconds() - 1 : expected.getUTCSeconds() + 1);
+                                break;
+                            default:
+                                break;
+                        }
+
+                        switch (snapUnits[l]) {
+                            case "@y":
+                                expected.setUTCMonth(0);
+                            case "@mon":
+                                expected.setUTCDate(1);
+                            case "@d":
+                                expected.setUTCHours(0);
+                            case "@h":
+                                expected.setUTCMinutes(0);
+                            case "@m":
+                                expected.setUTCSeconds(0);
+                            case "@s":
+                                expected.setUTCMilliseconds(0);
+                            default:
+                                break;
+                        }
+                        const actual = main.parse(expr);
+                        console.log(expr, expected.toUTCString(), actual.toUTCString());
+                        expect(expected, `expected: ${expected.toUTCString()}, actual: ${actual.toUTCString()} (${expr})`).to.deep.equal(actual);
+                        }
                     }
                 }
             }
-        }
-    });
-
-    it('parse: offsets arithmetic', () => {
-        const clock = sinon.useFakeTimers(new Date(Date.UTC(2022, 5, 30, 1, 2, 3, 4))); // 30 Jun 2022 01:02:03.004
-
-        // 'now()' should return current date
-        let expected = new Date();
-        let actual = main.parse('now()');
-        expect(expected).to.deep.equal(actual);
-
-        // 'now()+1s+1m' should return time after 61 sec 
-        expected = new Date(Date.now() + (1000 * 61));
-        actual = main.parse('now()+1s+1m');
-        expect(expected).to.deep.equal(actual);
-
-        // 'now()+61s' should return time after 61 sec 
-        expected = new Date(Date.now() + (1000 * 61));
-        actual = main.parse('now()+61s');
-        expect(expected).to.deep.equal(actual);
-
-        const add = { s: 1 * 1000, m: 60 * 1000, h: 60 * 60 * 1000, d: 24 * 60 * 60 * 1000 };
-        for (i = 0; i < modifiers.length; i++) {
-            for (j = 0; j < snapUnits.length - 2; j++) {
-                for (k = 0; k < operators.length; k++) {
-                    // add 5 units (5 sec / 5 min / 5 hrs / 5 days, we are not testing mon & year for now)
-                    expected = new Date(Date.now() + (5 * (operators[k] === '-' ? -1 * add[snapUnits[j]] : add[snapUnits[j]])));
-
-                    actual = main.parse(`${modifiers[i]}${operators[k]}5${snapUnits[j]}`)
-                    // console.log(`${expected.toUTCString()} | ${actual.toUTCString()}`);
-                    expect(expected, `${modifiers[i]}${operators[k]}5${snapUnits[j]} ${expected - actual}`).to.deep.equal(actual);
-                }
-            }
-        }
-        clock.restore();
-    });
-
-    it('parse: snap', () => {
-        const clock = sinon.useFakeTimers(new Date(Date.UTC(2022, 0, 30, 1, 2, 3, 4)));
-
-        // '@s' should return current time rounded to seconds 
-        var expected = new Date(Date.UTC(2022, 0, 30, 1, 2, 3, 0));
-        var actual = main.parse('now()@s');
-        expect(expected).to.deep.equal(actual);
-
-        // '@m' should return current time rounded to min
-        expected = new Date(Date.UTC(2022, 0, 30, 1, 2, 0, 0));
-        actual = main.parse('now()@m');
-        expect(expected).to.deep.equal(actual);
-
-        // '@h' should return current time rounded to hours 
-        expected = new Date(Date.UTC(2022, 0, 30, 1, 0, 0, 0));
-        actual = main.parse('now()@h');
-        expect(expected).to.deep.equal(actual);
-
-        // '@d' should return current time rounded to days 
-        expected = new Date(Date.UTC(2022, 0, 30, 0, 0, 0, 0));
-        actual = main.parse('now()@d');
-        expect(expected).to.deep.equal(actual);
-
-        // '@mon' should return current time rounded to months 
-        expected = new Date(Date.UTC(2022, 0, 1, 0, 0, 0, 0));
-        actual = main.parse('now()@mon');
-        expect(expected).to.deep.equal(actual);
-
-        // '@y' should return current time rounded to years 
-        expected = new Date(Date.UTC(2022, 0, 1, 0, 0, 0, 0));
-        actual = main.parse('now()@y');
-        expect(expected).to.deep.equal(actual);
-
         clock.restore();
     });
 });
