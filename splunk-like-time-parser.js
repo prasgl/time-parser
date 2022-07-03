@@ -94,45 +94,73 @@ const getOffsets = (offsets) => {
     return set;
 }
 
+/**
+ * Round down the date to the specified part
+ * @param {*} baseDate 
+ * @param {*} snapUnit 
+ * @returns 
+ */
 const snapDate = (baseDate, snapUnit) => {
-    const baseDateParts = {
-        y: baseDate.getUTCFullYear(),
-        mon: baseDate.getUTCMonth(),
-        d: baseDate.getUTCDate(),
-        h: baseDate.getUTCHours(),
-        m: baseDate.getUTCMinutes(),
-        s: baseDate.getUTCSeconds(),
-        ms: baseDate.getUTCMilliseconds()
-    }
     switch (snapUnit) {
         case "y":
-            baseDateParts.mon = 0;
+            baseDate.setUTCMonth(0);
         case "mon":
-            baseDateParts.d = 1;
+            baseDate.setUTCDate(1);
         case "d":
-            baseDateParts.h = 0;
+            baseDate.setUTCHours(0);
         case "h":
-            baseDateParts.m = 0;
+            baseDate.setUTCMinutes(0);
         case "m":
-            baseDateParts.s = 0;
+            baseDate.setUTCSeconds(0);
         case "s":
-            baseDateParts.ms = 0;
+            baseDate.setUTCMilliseconds(0);
         default:
             break;
     }
-
-    baseDate = new Date(Date.UTC(
-        baseDateParts.y,
-        baseDateParts.mon,
-        baseDateParts.d,
-        baseDateParts.h,
-        baseDateParts.m,
-        baseDateParts.s,
-        baseDateParts.ms));
-
     return baseDate;
 }
 
+/**
+ * Update the date as per the offsets
+ * @param {*} baseDate The date to be updated
+ * @param {*} offsets the updates to be applied
+ * @returns the updated date
+ */
+
+const manipulateDate = (baseDate, offsets) => {
+    const copy = baseDate;
+    offsets.forEach(offset => {
+        switch (offset.offsetUnit) {
+            case "y":
+                copy.setUTCFullYear(copy.getUTCFullYear() + offset.offsetPeriod);
+                break;
+            case "mon":
+                copy.setUTCMonth(copy.getUTCMonth() + offset.offsetPeriod);
+                break;
+            case "d":
+                copy.setUTCDate(copy.getUTCDate() + offset.offsetPeriod);
+                break;
+            case "h":
+                copy.setUTCHours(copy.getUTCHours() + offset.offsetPeriod);
+                break;
+            case "m":
+                copy.setUTCMinutes(copy.getUTCMinutes() + offset.offsetPeriod);
+                break;
+            case "s":
+                copy.setUTCSeconds(copy.getUTCSeconds() + offset.offsetPeriod);
+                break;
+        }
+    });
+    return copy;
+}
+
+/**
+ * Splunk-like-time-parser. Parses the input string and returns appropriate date object.
+ * Can specify the modifier, offsets and snap instructions.
+ * @param {*} expr the string to parse. Looks like 'now()+5d-13h@m', where "now()" is the 
+ * modifier, "+5d-13h" is offset and "@m" is the snap instruction
+ * @returns Updated date object
+ */
 exports.parse = (expr) => {
     const { modifier, snapUnit, offsets } = validateInput(expr);
 
@@ -140,36 +168,17 @@ exports.parse = (expr) => {
 
     // The base value for subsequent date parts manipulation
     let baseDate;
+
+    // currently the parser is implemented only for "now()", but
+    // it may support other modifiers in the future
     if (modifier === 'now()')
         baseDate = new Date();
 
-    // get the year, month etc of the baseDate so as to add/reduce the offset 
-    const baseDateParts = {
-        y: baseDate.getUTCFullYear(),
-        mon: baseDate.getUTCMonth(),
-        d: baseDate.getUTCDate(),
-        h: baseDate.getUTCHours(),
-        m: baseDate.getUTCMinutes(),
-        s: baseDate.getUTCSeconds(),
-        ms: baseDate.getUTCMilliseconds()
-    }
-
-    offsetsArray.forEach(offset => {
-        baseDateParts[offset.offsetUnit] += offset.offsetPeriod;
-
-        // update the base date before using it further
-        baseDate = new Date(Date.UTC(
-            baseDateParts.y,
-            baseDateParts.mon,
-            baseDateParts.d,
-            baseDateParts.h,
-            baseDateParts.m,
-            baseDateParts.s,
-            baseDateParts.ms));
-    })
+    baseDate = manipulateDate(baseDate, offsetsArray);
 
     if (snapUnit) {
         baseDate = snapDate(baseDate, snapUnit);
     }
+
     return baseDate;
 }

@@ -39,7 +39,7 @@ describe('Splunk-like Time Parser', () => {
 
     it('parse: offsets arithmetic and snap', () => {
         /*
-            Sample tests
+            Sample tests:-
             now()+1d	    2022-01-09T09:00:00.00Z 	Now plus1 day 
             now()-1d 	    2022-01-07T09:00:00.00Z 	Now minus 1 day
             now()@d 	    2022-01-08T00:00:00.00Z 	Now snapped to day 
@@ -52,7 +52,7 @@ describe('Splunk-like Time Parser', () => {
         // 'now()+10d+12h' should return time after 10 and a half days 
         const expected10d12h = new Date(Date.UTC(2022, 0, 18, 21, 0, 0, 0));
         const actual10d12h = main.parse('now()+10d+12h');
-        console.log('now()+10d+12h', expected10d12h.toUTCString(), actual10d12h.toUTCString());
+        // console.log('now()+10d+12h', expected10d12h.toUTCString(), actual10d12h.toUTCString());
         expect(expected10d12h, `expected: ${expected10d12h.toUTCString()}, actual: now()+10d+12h`).to.deep.equal(actual10d12h);
 
         const modifiers = ['now()'];
@@ -113,7 +113,7 @@ describe('Splunk-like Time Parser', () => {
                                 break;
                         }
                         const actual = main.parse(expr);
-                        console.log(expr, expected.toUTCString(), actual.toUTCString());
+                        // console.log(expr, expected.toUTCString(), actual.toUTCString());
                         expect(expected, `expected: ${expected.toUTCString()}, actual: ${actual.toUTCString()} (${expr})`).to.deep.equal(actual);
                         }
                     }
